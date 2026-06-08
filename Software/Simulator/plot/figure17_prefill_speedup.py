@@ -8,6 +8,8 @@ import numpy as np
 
 # Keep the legacy prefill style exactly aligned with the original prefill speedup plot.
 plt.rcParams['font.family'] = 'Times New Roman'
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['ps.fonttype'] = 42
 plt.rcParams['mathtext.fontset'] = 'custom'
 plt.rcParams['mathtext.rm'] = 'Times New Roman'
 plt.rcParams['mathtext.it'] = 'Times New Roman:italic'
@@ -16,28 +18,29 @@ plt.rcParams['mathtext.bf'] = 'Times New Roman:bold'
 # Font configuration copied from the legacy script.
 font_config = {
     'title': 24,
-    'axis_label': 34,
+    'axis_label': 30,
     'legend': 30,
-    'tick_label': 30,
+    'tick_label': 28,
     'bar_label': 25,
     'group_label': 28,
     'extra_label': 32,
 }
 
 # Layout / category ordering copied from the legacy script.
-groups_single = ['W4A4', 'W4A8', 'W8A8', 'W16A16', 'GeoMean']
-categories = ['ANT', 'OliVe', 'Tender', 'M-ANT', 'UniCore']
-category_prefixes = ['ant', 'olive', 'tender', 'mant', 'unicore']
+groups_single = ['W4A4', 'W4A8', 'W8A8', 'W16A16', 'Avg.']
+categories = ['OliVe', 'Tender', 'M-ANT', 'UniCore']
+category_prefixes = ['olive', 'tender', 'mant', 'unicore']
+w16_visible_prefixes = ['tender', 'unicore']
 model_order = [
-    ('meta-llama/Llama-2-7b-hf', 'LLaMA2-7B'),
-    ('meta-llama/Meta-Llama-3-8B', 'LLaMA3-8B'),
+    ('meta-llama/Llama-2-7b-hf', 'Llama-2-7B'),
+    ('meta-llama/Meta-Llama-3-8B', 'Llama-3-8B'),
 ]
 base_precisions = ['w4a4', 'w4a8', 'w8a8']
 w16_precision = 'w16a16'
 
 style_config = {
     'figsize': (15, 8),
-    'bar_width': 0.4,
+    'bar_width': 0.55,
     'bar_spacing': 0.2,
     'label_offset': 0.3,
     'group_label_offset_x': 0.5,
@@ -76,7 +79,7 @@ def parse_args():
     parser.add_argument(
         '--output-stem',
         type=Path,
-        default=plot_dir / 'figure17',
+        default=repo_root / 'figure' / 'figure17',
         help='Output path stem. The script writes both .pdf and .png.',
     )
     parser.add_argument(
@@ -189,15 +192,17 @@ def build_speedup_matrix(data, model_name, w16a16_reference):
         )
     cycle_discrim = np.array(cycle_discrim)
 
-    cycle_olive = cycle_discrim[1]
+    cycle_olive = np.array([
+        data[('olive', precision, model_name)]['total_cycle'] for precision in base_precisions
+    ])
     speedup_discrim = cycle_olive / cycle_discrim
 
-    w16_row = np.array([np.nan, np.nan, np.nan, np.nan, np.nan])
+    w16_row = np.full(len(category_prefixes), np.nan)
     # W16A16 only has Tender / UniCore simulator data, so keep the existing
     # reference behavior for that column instead of forcing an unavailable
     # OliVe baseline.
     ref_cycle = data[(w16a16_reference, w16_precision, model_name)]['total_cycle']
-    for prefix in ['tender', 'unicore']:
+    for prefix in w16_visible_prefixes:
         idx = category_prefixes.index(prefix)
         cur_cycle = data[(prefix, w16_precision, model_name)]['total_cycle']
         w16_row[idx] = ref_cycle / cur_cycle if cur_cycle > 0 else np.nan
@@ -208,8 +213,8 @@ def build_speedup_matrix(data, model_name, w16a16_reference):
     )
 
     geomean_col = []
-    for i in range(5):
-        if i == 2 or i == 4:
+    for i, prefix in enumerate(category_prefixes):
+        if prefix in w16_visible_prefixes:
             geomean_col.append(np.nanmean(speedup_discrim[i, :]))
         else:
             geomean_col.append(np.mean(speedup_discrim[i, :3]))
@@ -238,17 +243,17 @@ def create_stacked_subplot(
     offset = 0
     for group in groups_single:
         if group == 'W16A16':
-            w16_actual_width = 2 * bar_width + bar_spacing
-            x = np.array([
-                offset - 2 * (bar_width + bar_spacing),
-                offset - 1 * (bar_width + bar_spacing),
-                offset,
-                offset,
-                offset + bar_width + bar_spacing,
-            ])
+            x = np.full(len(categories), offset, dtype=float)
+            for visible_idx, prefix in enumerate(w16_visible_prefixes):
+                category_idx = category_prefixes.index(prefix)
+                x[category_idx] = offset + visible_idx * (bar_width + bar_spacing)
             x_positions.append(x)
-            extra_spacing = group_spacing * 1.5
-            offset += w16_actual_width + group_spacing + extra_spacing
+            w16_actual_width = (
+                len(w16_visible_prefixes) * bar_width
+                + (len(w16_visible_prefixes) - 1) * bar_spacing
+            )
+            # Keep the two available W16A16 bars centered between neighboring groups.
+            offset += w16_actual_width + group_spacing + bar_spacing
         else:
             x = np.arange(len(categories)) * (bar_width + bar_spacing) + offset
             x_positions.append(x)
@@ -304,7 +309,7 @@ def create_stacked_subplot(
         x_group = x_positions[i]
         if group == 'W16A16':
             for j, cat in enumerate(categories):
-                if j == 2 or j == 4:
+                if category_prefixes[j] in w16_visible_prefixes:
                     xticklabels.append(cat)
                     xticks_filtered.append(x_group[j])
         else:
@@ -322,14 +327,14 @@ def create_stacked_subplot(
 
     ax.xaxis.set_ticks_position('bottom')
 
-    ax.set_ylabel(ylabel, fontsize=font_config['axis_label'])
+    ax.set_ylabel(ylabel, fontsize=font_config['axis_label'], labelpad=12)
     ax.tick_params(axis='y', labelsize=font_config['tick_label'])
     ax.set_ylim(0, 9.5)
     ax.grid(axis='y', linestyle='--', alpha=0.3)
 
     vline_ymin = -0.7 if is_bottom_plot else 0
     for i in range(len(groups_single) - 1):
-        boundary = x_positions[i][-1] + (bar_width + group_spacing + margin) / 2
+        boundary = (x_positions[i][-1] + x_positions[i + 1][0]) / 2
         ax.axvline(
             x=boundary,
             color='black',
@@ -365,7 +370,7 @@ def create_stacked_subplot(
         for idx, (x, width, group) in enumerate(zip(x_min_pos, x_range, groups_single)):
             label_x = x + (width * group_label_offset_x)
             ax.text(
-                label_x if idx != 3 else 10,
+                label_x,
                 label_y,
                 group,
                 ha='center',
@@ -402,8 +407,8 @@ def draw_figure(data_top, data_bottom, output_stem):
     create_stacked_subplot(
         ax_top,
         data_matrix=data_top,
-        subplot_title='LLaMA2-7B',
-        ylabel='Speed Up',
+        subplot_title='Llama-2-7B',
+        ylabel='Speedup',
         is_bottom_plot=False,
         bar_width=style_config['bar_width'],
         bar_spacing=style_config['bar_spacing'],
@@ -417,8 +422,8 @@ def draw_figure(data_top, data_bottom, output_stem):
     create_stacked_subplot(
         ax_bottom,
         data_matrix=data_bottom,
-        subplot_title='LLaMA3-8B',
-        ylabel='Speed Up',
+        subplot_title='Llama-3-8B',
+        ylabel='Speedup',
         is_bottom_plot=True,
         bar_width=style_config['bar_width'],
         bar_spacing=style_config['bar_spacing'],

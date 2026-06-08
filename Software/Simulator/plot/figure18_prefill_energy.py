@@ -9,6 +9,8 @@ from matplotlib.patches import Patch
 
 
 plt.rcParams['font.family'] = 'Times New Roman'
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['ps.fonttype'] = 42
 plt.rcParams['mathtext.fontset'] = 'custom'
 plt.rcParams['mathtext.rm'] = 'Times New Roman'
 plt.rcParams['mathtext.it'] = 'Times New Roman:italic'
@@ -17,29 +19,29 @@ plt.rcParams['mathtext.bf'] = 'Times New Roman:bold'
 
 FONT_CONFIG = {
     'title': 30,
-    'axis_label': 54,
-    'legend': 52,
-    'tick_label': 39,
-    'bar_label': 44,
+    'axis_label': 50,
+    'legend': 48,
+    'tick_label': 43,
+    'bar_label': 38,
     'group_label': 44,
-    'extra_label': 46,
+    'extra_label': 44,
 }
 
 STYLE_CONFIG = {
-    'figsize': (30, 17),
-    'bar_width': 0.3,
+    'figsize': (24, 13.6),
+    'bar_width': 0.4,
     'bar_spacing': 0.2,
     'label_offset': 0.02,
     'group_label_offset_x': 0.5,
-    'group_label_offset_y': -0.57,
+    'group_label_offset_y': -0.68,
     'group_spacing': 0.2,
     'margin': 0.2,
     'boundary_linewidth': 1.5,
 }
 
 MODEL_ORDER = [
-    ('meta-llama/Llama-2-7b-hf', 'LLaMA2-7B'),
-    ('meta-llama/Meta-Llama-3-8B', 'LLaMA3-8B'),
+    ('meta-llama/Llama-2-7b-hf', 'Llama-2-7B'),
+    ('meta-llama/Meta-Llama-3-8B', 'Llama-3-8B'),
 ]
 PRECISION_ORDER = [
     ('w4a4', 'W4A4'),
@@ -47,20 +49,25 @@ PRECISION_ORDER = [
     ('w8a8', 'W8A8'),
 ]
 CATEGORY_ORDER = [
-    ('ANT', 'ant'),
-    ('OLIVE', 'olive'),
-    ('TENDER', 'tender'),
-    ('MANT', 'mant'),
-    ('UNICORE', 'unicore'),
+    ('OliVe', 'olive'),
+    ('Tender', 'tender'),
+    ('M-ANT', 'mant'),
+    ('UniCore', 'unicore'),
 ]
 
 ENERGY_TEXTURES = {
-    'Dram': {'color': '#cae9ff', 'hatch': ''},
-    'Sram': {'color': '#5fa8d3', 'hatch': '\\\\'},
+    'DRAM': {'color': '#cae9ff', 'hatch': ''},
+    'SRAM': {'color': '#5fa8d3', 'hatch': '\\\\'},
     'Core': {'color': '#1a759f', 'hatch': '/'},
 }
 TOPSW_TEXTURES = {
     'TOPS/W': {'color': '#236AB3', 'hatch': '|'},
+}
+TOPSW_CATEGORY_TEXTURES = {
+    'OliVe': {'color': '#dbe8f4', 'hatch': '|', 'edgecolor': '#1f2a44'},
+    'Tender': {'color': '#dbe8f4', 'hatch': '|', 'edgecolor': '#1f2a44'},
+    'M-ANT': {'color': '#dbe8f4', 'hatch': '|', 'edgecolor': '#1f2a44'},
+    'UniCore': {'color': '#3d7db8', 'hatch': '|', 'edgecolor': 'black'},
 }
 
 
@@ -89,7 +96,7 @@ def parse_args():
     parser.add_argument(
         '--output-stem',
         type=Path,
-        default=plot_dir / 'figure18',
+        default=repo_root / 'figure' / 'figure18',
         help='Output path stem. The script writes both .pdf and .png.',
     )
     return parser.parse_args()
@@ -235,6 +242,7 @@ def create_stacked_subplot(
     group_label_offset_x=0.42,
     group_label_offset_y=0.15,
     y_ticks=None,
+    category_textures=None,
 ):
     x_positions = []
     offset = 0
@@ -245,11 +253,14 @@ def create_stacked_subplot(
     x_positions_flat = np.concatenate(x_positions)
 
     for x_group, val_group in zip(x_positions, stacked_values):
-        for x_bar, val_bar in zip(x_group, val_group):
+        for cat_idx, (x_bar, val_bar) in enumerate(zip(x_group, val_group)):
             bottom = 0
             for i, sub_val in enumerate(val_bar):
-                sub_cat = list(sub_textures.keys())[i]
-                texture = sub_textures[sub_cat]
+                if category_textures is not None:
+                    texture = category_textures[categories[cat_idx]]
+                else:
+                    sub_cat = list(sub_textures.keys())[i]
+                    texture = sub_textures[sub_cat]
                 ax.bar(
                     x_bar,
                     sub_val,
@@ -257,7 +268,7 @@ def create_stacked_subplot(
                     bottom=bottom,
                     color=texture['color'],
                     hatch=texture['hatch'],
-                    edgecolor='black',
+                    edgecolor=texture.get('edgecolor', 'black'),
                     linewidth=0.8,
                 )
                 bottom += sub_val
@@ -280,7 +291,7 @@ def create_stacked_subplot(
         x_positions_flat[-1] + bar_width / 2 + margin,
     )
 
-    ax.set_ylabel(ylabel, fontsize=FONT_CONFIG['axis_label'])
+    ax.set_ylabel(ylabel, fontsize=FONT_CONFIG['axis_label'], labelpad=14)
     if ylabel_position is not None:
         ax.yaxis.set_label_coords(ylabel_position[0], ylabel_position[1])
     ax.tick_params(axis='y', labelsize=FONT_CONFIG['tick_label'])
@@ -297,7 +308,7 @@ def create_stacked_subplot(
             fontsize=FONT_CONFIG['tick_label'],
             rotation=90,
         )
-        ax.tick_params(axis='x', length=0, pad=15)
+        ax.tick_params(axis='x', length=0, pad=5)
         ax.xaxis.set_ticks_position('bottom')
     else:
         ax.set_xticks([])
@@ -323,7 +334,7 @@ def create_stacked_subplot(
             )
 
         for i in range(len(groups) - 1):
-            boundary = x_positions[i][-1] + (bar_width + group_spacing + margin) / 2
+            boundary = (x_positions[i][-1] + x_positions[i + 1][0]) / 2
             ax.axvline(
                 x=boundary,
                 color='black',
@@ -356,7 +367,10 @@ def create_stacked_subplot(
         x_positions_flat[-1] + bar_width / 2 + margin,
     )
     for i, x_group in enumerate(x_positions):
-        x_extra_label = x_group[-1] + (bar_width + group_spacing + margin) / 2
+        if i < len(x_positions) - 1:
+            x_extra_label = (x_group[-1] + x_positions[i + 1][0]) / 2
+        else:
+            x_extra_label = x_group[-1] + (bar_width + group_spacing + margin) / 2
         width = x_group[-1] - x_group[0]
 
         if show_extra_labels:
@@ -424,6 +438,7 @@ def draw_figure(groups, extra_labels, categories, energy_values, topsw_values, o
         handletextpad=0.6,
         edgecolor='black',
         columnspacing=2.05,
+        borderpad=0.25,
     )
 
     create_stacked_subplot(
@@ -461,7 +476,7 @@ def draw_figure(groups, extra_labels, categories, energy_values, topsw_values, o
         stacked_values=topsw_values,
         ylabel='Normalized TOPS/W',
         sub_textures=TOPSW_TEXTURES,
-        ylabel_position=(-0.02, 0.3),
+        ylabel_position=(-0.040, 0.12),
         ylimit=(0, 4.0),
         label_limit=4.0,
         fraction_bits=2,
@@ -477,10 +492,11 @@ def draw_figure(groups, extra_labels, categories, energy_values, topsw_values, o
         group_label_offset_x=STYLE_CONFIG['group_label_offset_x'],
         group_label_offset_y=STYLE_CONFIG['group_label_offset_y'],
         y_ticks=[0, 2, 4],
+        category_textures=TOPSW_CATEGORY_TEXTURES,
     )
 
     plt.tight_layout()
-    plt.subplots_adjust(hspace=0.05)
+    plt.subplots_adjust(hspace=0.10)
     output_stem = Path(output_stem)
     output_stem.parent.mkdir(parents=True, exist_ok=True)
     output_pdf = output_stem.with_suffix('.pdf')

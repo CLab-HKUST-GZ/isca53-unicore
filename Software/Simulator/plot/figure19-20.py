@@ -11,15 +11,18 @@ from matplotlib.patches import Patch
 FONT_FAMILY = "Times New Roman"
 FONT_WEIGHT_BOLD = "bold"
 
-FONT_SIZE_AXIS_LABEL = 28
+FONT_SIZE_AXIS_LABEL = 32
 FONT_SIZE_TICK_LABEL = 24
+FONT_SIZE_BASELINE_LABEL = 28
 FONT_SIZE_BAR_VALUE = 24
-FONT_SIZE_MODEL_LABEL = 26
+FONT_SIZE_MODEL_LABEL = 28
 FONT_SIZE_PRECISION_LABEL = 28
 FONT_SIZE_LEGEND = 28
 
 
 plt.rcParams["font.family"] = FONT_FAMILY
+plt.rcParams["pdf.fonttype"] = 42
+plt.rcParams["ps.fonttype"] = 42
 plt.rcParams["mathtext.fontset"] = "custom"
 plt.rcParams["mathtext.rm"] = FONT_FAMILY
 plt.rcParams["mathtext.it"] = f"{FONT_FAMILY}:italic"
@@ -39,12 +42,11 @@ PRECISIONS = [
 ]
 
 MODELS = [
-    ("meta-llama/Llama-2-7b-hf", "LLaMA2-7B"),
-    ("meta-llama/Meta-Llama-3-8B", "LLaMA3-8B"),
+    ("meta-llama/Llama-2-7b-hf", "Llama-2-7B"),
+    ("meta-llama/Meta-Llama-3-8B", "Llama-3-8B"),
 ]
 
 CATEGORIES = [
-    ("ANT", "ant"),
     ("OliVe", "olive"),
     ("Tender", "tender"),
     ("M-ANT", "mant"),
@@ -181,7 +183,7 @@ def draw_figure(
     fig, ax = plt.subplots(1, 1, figsize=(16, 5.5))
 
     # Draw energy bars
-    bar_width = 0.62
+    bar_width = 0.75
     total_values = []
     for g, x_group in enumerate(x_groups):
         for c, x in enumerate(x_group):
@@ -229,7 +231,7 @@ def draw_figure(
                 fontweight=FONT_WEIGHT_BOLD,
             )
 
-    top_ylim = max(1.28, max(total_values) + 0.30)
+    top_ylim = max(1.28, max(total_values) + 0.42)
     ax.set_ylim(0, top_ylim)
     ax.set_xlim(x_flat[0] - 0.8, x_flat[-1] + 0.8)
 
@@ -248,7 +250,7 @@ def draw_figure(
         center = 0.5 * (left + right)
         ax.text(
             center,
-            top_ylim - 0.01,
+            top_ylim - 0.03,
             precision_label,
             ha="center",
             va="bottom",
@@ -273,7 +275,7 @@ def draw_figure(
     ax.set_xticklabels(
         [cat for _ in range(num_groups) for cat, _ in CATEGORIES],
         rotation=90,
-        fontsize=FONT_SIZE_TICK_LABEL,
+        fontsize=FONT_SIZE_BASELINE_LABEL,
     )
 
     # Model labels
@@ -281,13 +283,32 @@ def draw_figure(
         center = 0.5 * (x_group[0] + x_group[-1])
         ax.text(
             center,
-            -0.42,
+            -0.60,
             model_labels_per_group[g],
             transform=ax.get_xaxis_transform(),
             ha="center",
             va="top",
             fontsize=FONT_SIZE_MODEL_LABEL,
             fontweight=FONT_WEIGHT_BOLD,
+            clip_on=False,
+        )
+
+    # Extend group boundaries below the axis so the baseline labels are grouped
+    # under each model, matching the label treatment in Figures 17/18.
+    x_left, x_right = ax.get_xlim()
+    model_boundaries = [x_left]
+    model_boundaries.extend(
+        0.5 * (x_groups[i][-1] + x_groups[i + 1][0])
+        for i in range(num_groups - 1)
+    )
+    model_boundaries.append(x_right)
+    for boundary in model_boundaries:
+        ax.axvline(
+            boundary,
+            color="black",
+            linewidth=1.2,
+            ymin=-0.70,
+            ymax=0.0,
             clip_on=False,
         )
 
@@ -311,7 +332,7 @@ def draw_figure(
     speedup_ymax = max(1.2, float(valid.max()) + 0.2) if valid.size else 1.2
     ax_speed.set_ylim(0, speedup_ymax)
     ax_speed.set_ylabel(
-        "Speed Up", fontsize=FONT_SIZE_AXIS_LABEL, rotation=270, labelpad=24
+        "Speedup", fontsize=FONT_SIZE_AXIS_LABEL, rotation=270, labelpad=34
     )
     ax_speed.tick_params(axis="y", labelsize=FONT_SIZE_TICK_LABEL)
     ax_speed.grid(False)
@@ -326,8 +347,8 @@ def draw_figure(
     # Legend
     legend_handles = [
         Patch(facecolor=COLOR_CORE, edgecolor="black", hatch="///", label="Core"),
-        Patch(facecolor=COLOR_SRAM, edgecolor="black", hatch="\\", label="Sram"),
-        Patch(facecolor=COLOR_DRAM, edgecolor="black", hatch="", label="Dram"),
+        Patch(facecolor=COLOR_SRAM, edgecolor="black", hatch="\\", label="SRAM"),
+        Patch(facecolor=COLOR_DRAM, edgecolor="black", hatch="", label="DRAM"),
         Line2D(
             [0],
             [0],
@@ -346,9 +367,10 @@ def draw_figure(
         frameon=True,
         edgecolor="black",
         fontsize=FONT_SIZE_LEGEND,
+        borderpad=0.25,
     )
 
-    fig.subplots_adjust(left=0.08, right=0.995, top=0.85, bottom=0.3)
+    fig.subplots_adjust(left=0.08, right=0.995, top=0.85, bottom=0.34)
     fig.savefig(output_pdf, format="pdf", bbox_inches="tight", dpi=300)
     fig.savefig(output_png, format="png", bbox_inches="tight", dpi=300)
     print(f"Saved: {output_pdf}")
